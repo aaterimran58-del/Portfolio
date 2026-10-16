@@ -30,6 +30,9 @@ export interface ScrollStackProps {
   onStackComplete?: () => void;
 }
 
+// Below this width the cards are simply shown one after another (no pinning).
+const COMPACT_BREAKPOINT = 768;
+
 const ScrollStack: React.FC<ScrollStackProps> = ({
   children,
   className = '',
@@ -52,6 +55,7 @@ const ScrollStack: React.FC<ScrollStackProps> = ({
   const initialTopsRef = useRef<number[]>([]);
   const lastTransformsRef = useRef(new Map());
   const isUpdatingRef = useRef(false);
+  const compactRef = useRef(false);
 
   const calculateProgress = useCallback((scrollTop: number, start: number, end: number) => {
     if (scrollTop < start) return 0;
@@ -82,7 +86,7 @@ const ScrollStack: React.FC<ScrollStackProps> = ({
   }, [useWindowScroll]);
 
   const updateCardTransforms = useCallback(() => {
-    if (!cardsRef.current.length || isUpdatingRef.current) return;
+    if (!cardsRef.current.length || isUpdatingRef.current || compactRef.current) return;
 
     isUpdatingRef.current = true;
 
@@ -90,9 +94,7 @@ const ScrollStack: React.FC<ScrollStackProps> = ({
     const stackPositionPx = parsePercentage(stackPosition, containerHeight);
     const scaleEndPositionPx = parsePercentage(scaleEndPosition, containerHeight);
 
-    const endElement = useWindowScroll
-      ? (document.querySelector('.scroll-stack-end') as HTMLElement)
-      : (scrollerRef.current?.querySelector('.scroll-stack-end') as HTMLElement);
+    const endElement = scrollerRef.current?.querySelector('.scroll-stack-end') as HTMLElement | null;
 
     const endElementTop = endElement
       ? endElement.getBoundingClientRect().top + window.scrollY
@@ -183,12 +185,69 @@ const ScrollStack: React.FC<ScrollStackProps> = ({
     baseScale,
     rotationAmount,
     blurAmount,
-    useWindowScroll,
     onStackComplete,
     calculateProgress,
     parsePercentage,
     getScrollData,
   ]);
+
+  /**
+   * (Re)measures the cards and decides between "stack" and "compact" mode.
+   *
+   * The original version measured the cards only once, on mount. On phones the text above
+   * the cards (hero/about) re-wraps when the web fonts and images finish loading, which moves
+   * the cards down. The stale positions then made the cards pin in the wrong place and slide
+   * over the next section. This runs again on resize, font load, page load and whenever the
+   * page height changes.
+   */
+  const applyLayout = useCallback(() => {
+    const scroller = scrollerRef.current;
+    const cards = cardsRef.current;
+    if (!scroller || !cards.length) return;
+
+    const viewportH = window.innerHeight;
+    const stackPx = parsePercentage(stackPosition, viewportH);
+    const tallest = Math.max(...cards.map((c) => c.offsetHeight));
+
+    // Phones, or any screen where a card is too tall to fit when pinned, scroll normally.
+    const compact =
+      window.innerWidth < COMPACT_BREAKPOINT || tallest + stackPx > viewportH - 24;
+
+    compactRef.current = compact;
+    scroller.classList.toggle('is-compact', compact);
+    lastTransformsRef.current.clear();
+
+    cards.forEach((card, i) => {
+      card.style.zIndex = `${i + 1}`;
+      card.style.marginBottom = i < cards.length - 1 ? `${itemDistance}px` : '';
+      card.style.transformOrigin = 'top center';
+      card.style.backfaceVisibility = 'hidden';
+      card.style.perspective = '1000px';
+      card.style.filter = '';
+      if (compact) {
+        card.style.willChange = 'auto';
+        card.style.transform = 'none';
+      } else {
+        card.style.willChange = 'transform, filter';
+        card.style.transform = 'translateZ(0)';
+      }
+    });
+
+    if (!compact) {
+      // Natural (transform-free) top positions, measured after the layout has settled.
+      cards.forEach((card) => {
+        card.style.transform = 'none';
+      });
+      initialTopsRef.current = cards.map(
+        (card) => card.getBoundingClientRect().top + window.scrollY
+      );
+      cards.forEach((card) => {
+        card.style.transform = 'translateZ(0)';
+      });
+    }
+
+    updateCardTransforms();
+  }, [itemDistance, stackPosition, parsePercentage, updateCardTransforms]);
 
   const handleScroll = useCallback(() => {
     updateCardTransforms();
@@ -217,34 +276,42 @@ const ScrollStack: React.FC<ScrollStackProps> = ({
   }, [handleScroll]);
 
   useLayoutEffect(() => {
-    const cards = Array.from(
-      document.querySelectorAll('.scroll-stack-card')
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+
+    cardsRef.current = Array.from(
+      scroller.querySelectorAll('.scroll-stack-card')
     ) as HTMLElement[];
 
-    cardsRef.current = cards;
-
-    // Record static natural top positions before any transforms are applied
-    initialTopsRef.current = cards.map((card) => {
-      const rect = card.getBoundingClientRect();
-      return rect.top + window.scrollY;
-    });
-
-    cards.forEach((card, i) => {
-      card.style.zIndex = `${i + 1}`;
-      if (i < cards.length - 1) {
-        card.style.marginBottom = `${itemDistance}px`;
-      }
-      card.style.willChange = 'transform, filter';
-      card.style.transformOrigin = 'top center';
-      card.style.backfaceVisibility = 'hidden';
-      card.style.transform = 'translateZ(0)';
-      card.style.perspective = '1000px';
-    });
-
     setupLenis();
-    updateCardTransforms();
+    applyLayout();
+
+    // Re-measure whenever something that can move the cards changes.
+    let pending: number | null = null;
+    const scheduleLayout = () => {
+      if (pending !== null) return;
+      pending = requestAnimationFrame(() => {
+        pending = null;
+        applyLayout();
+      });
+    };
+
+    window.addEventListener('resize', scheduleLayout);
+    window.addEventListener('orientationchange', scheduleLayout);
+    window.addEventListener('load', scheduleLayout);
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(scheduleLayout).catch(() => {});
+    }
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(scheduleLayout) : null;
+    resizeObserver?.observe(document.body);
 
     return () => {
+      window.removeEventListener('resize', scheduleLayout);
+      window.removeEventListener('orientationchange', scheduleLayout);
+      window.removeEventListener('load', scheduleLayout);
+      resizeObserver?.disconnect();
+      if (pending !== null) cancelAnimationFrame(pending);
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
@@ -257,20 +324,7 @@ const ScrollStack: React.FC<ScrollStackProps> = ({
       lastTransformsRef.current.clear();
       isUpdatingRef.current = false;
     };
-  }, [
-    itemDistance,
-    itemScale,
-    itemStackDistance,
-    stackPosition,
-    scaleEndPosition,
-    baseScale,
-    rotationAmount,
-    blurAmount,
-    useWindowScroll,
-    onStackComplete,
-    setupLenis,
-    updateCardTransforms,
-  ]);
+  }, [setupLenis, applyLayout]);
 
   return (
     <div className={`scroll-stack-scroller ${className}`.trim()} ref={scrollerRef}>

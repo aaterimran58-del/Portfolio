@@ -27,3 +27,16 @@
   width: 100%;
   height: 1px;
 }
+
+/* Compact mode (phones / short screens): cards are taller than the screen, so pinning
+   them would cut off their content. Let them scroll normally, one after another. */
+.scroll-stack-scroller.is-compact .scroll-stack-inner {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.scroll-stack-scroller.is-compact .scroll-stack-card {
+  will-change: auto;
+  transform: none;
+  -webkit-transform: none;
+}

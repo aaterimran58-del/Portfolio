@@ -117,11 +117,11 @@ export const VoiceNarrator: React.FC = () => {
     <button
       onClick={handleToggle}
       aria-label={enabled ? 'Mute voice intro' : 'Enable voice intro'}
-      className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-full border border-[#8C6D4F]/40 bg-black/70 backdrop-blur-md text-[#E8DFD8] hover:border-[#D4AF37]/70 hover:text-[#F7E7C4] transition-colors shadow-[0_0_20px_rgba(0,0,0,0.4)]"
+      className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 flex items-center gap-2 px-3 py-2.5 sm:px-4 rounded-full border border-[#8C6D4F]/40 bg-black/70 backdrop-blur-md text-[#E8DFD8] hover:border-[#D4AF37]/70 hover:text-[#F7E7C4] transition-colors shadow-[0_0_20px_rgba(0,0,0,0.4)]"
       style={{ fontFamily: "'Montserrat', sans-serif" }}
     >
       <span className="text-sm">{enabled ? '🔊' : '🔈'}</span>
-      <span className="text-[10px] font-medium tracking-[0.15em] uppercase">
+      <span className="hidden sm:inline text-[10px] font-medium tracking-[0.15em] uppercase">
         {enabled ? 'Voice On' : 'Voice Intro'}
       </span>
     </button>

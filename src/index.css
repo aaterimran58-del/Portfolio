@@ -1,9 +1,29 @@
-
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,400&family=Montserrat:wght@200;300;400;500;600&display=swap');
 @import "tailwindcss";
+
 html, body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
   background-color: #000;
+}
+
+/* `clip` stops sideways panning on phones without turning html/body into scroll containers */
+@supports (overflow: clip) {
+  html, body {
+    overflow-x: clip;
+  }
+}
+
+/* Mobile hero: darkens the top (nav) and the bottom (text) so copy stays readable
+   over the bright video, while the face in the middle of the frame stays clear. */
+.hero-mobile-scrim {
+  background:
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0) 16%),
+    linear-gradient(
+      to top,
+      rgba(0, 0, 0, 0.97) 0%,
+      rgba(0, 0, 0, 0.9) 38%,
+      rgba(0, 0, 0, 0.45) 60%,
+      rgba(0, 0, 0, 0) 78%
+    );
 }
